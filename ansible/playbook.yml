@@ -1,0 +1,88 @@
+---
+- name: Local Infrastructure Bootstrapping and Provisioning
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    terraform_dir: "{{ playbook_dir }}/../terraform"
+    floci_image: "floci/floci:latest"
+    floci_container_name: "flocci_local"
+    floci_port: "4566"
+    subscriber_email: "{{ lookup('env', 'SUBSCRIBER_EMAIL') | default('admin@example.com', true) }}"
+
+  tasks:
+
+    - name: Ensure Floci emulator container is running
+      community.docker.docker_container:
+        name: "{{ floci_container_name }}"
+        image: "{{ floci_image }}"
+        state: started
+        restart_policy: unless-stopped
+        recreate: false
+        pull: true
+        ports:
+          - "{{ floci_port }}:4566"
+        env:
+          AWS_DEFAULT_REGION: "us-east-1"
+
+    - name: Wait for Floci API to become available
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ floci_port }}/_localstack/health"
+        method: GET
+        status_code: 200
+      register: floci_health
+      retries: 15
+      delay: 5
+      until: floci_health.status == 200
+
+    - name: Check Minikube cluster status
+      ansible.builtin.command: minikube status
+      register: minikube_status
+      failed_when: false
+      changed_when: false
+
+    - name: Start Minikube if not running
+      ansible.builtin.command: minikube start --driver=docker
+      when: minikube_status.rc != 0 or 'Running' not in minikube_status.stdout
+
+    - name: Verify Kubernetes connectivity
+      ansible.builtin.command: kubectl get nodes
+      register: kubectl_nodes
+      changed_when: false
+
+    - name: Validate Terraform configuration
+      ansible.builtin.command:
+        cmd: terraform validate
+        chdir: "{{ terraform_dir }}"
+      changed_when: false
+
+    - name: Apply Terraform Infrastructure
+      community.general.terraform:
+        project_path: "{{ terraform_dir }}"
+        state: present
+        force_init: true
+        variables:
+          subscriber_email: "{{ subscriber_email }}"
+      register: tf_result
+
+    - name: Display Infrastructure Outputs
+      ansible.builtin.debug:
+        msg:
+          - "Infrastructure provisioning completed successfully."
+          - "S3 Bucket Name : {{ tf_result.outputs['s3_bucket_name']['value'] }}"
+          - "SNS Topic ARN  : {{ tf_result.outputs['sns_topic_arn']['value'] }}"
+          - "Subscriber     : {{ subscriber_email }}"
+
+    - name: Verify Docker containers
+      ansible.builtin.command: docker ps
+      register: docker_status
+      changed_when: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Floci running on port {{ floci_port }}"
+          - "Minikube cluster available"
+          - "Terraform applied successfully"
+          - "Infrastructure ready for application deployment"

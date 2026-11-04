@@ -1,0 +1,109 @@
+```groovy
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+    }
+
+    environment {
+        REPORT_FILE = "ansible-report.txt"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Provision Infrastructure') {
+            steps {
+                script {
+
+
+                    def status = sh(
+                        script: """
+                            set -o pipefail
+
+                            ansible-playbook \
+                                -i localhost, \
+                                -c local \
+                                ansible/playbook.yml \
+                                2>&1 | tee "${REPORT_FILE}"
+                        """,
+                        returnStatus: true
+                    )
+
+                    archiveArtifacts(
+                        artifacts: REPORT_FILE,
+                        fingerprint: true,
+                        allowEmptyArchive: false
+                    )
+
+                    if (status != 0) {
+                        error(
+                            "Infrastructure provisioning failed. " +
+                            "Ansible exit code: ${status}. " +
+                            "See ${REPORT_FILE}"
+                        )
+                    }
+
+                    echo "Infrastructure provisioning completed successfully."
+                }
+            }
+        }
+    }
+
+    post {
+
+        success {
+            emailext(
+                subject: "Infrastructure Provisioning Successful - Build #${BUILD_NUMBER}",
+
+                body: """
+Infrastructure provisioning completed successfully.
+
+Project : ${JOB_NAME}
+Build   : #${BUILD_NUMBER}
+
+Build URL:
+${BUILD_URL}
+
+The full Ansible execution report is attached.
+                """,
+
+                attachmentsPattern: "${REPORT_FILE}",
+                to: "solomon@example.com"
+            )
+        }
+
+        failure {
+            emailext(
+                subject: "Infrastructure Provisioning Failed - Build #${BUILD_NUMBER}",
+
+                body: """
+Infrastructure provisioning failed.
+
+Project : ${JOB_NAME}
+Build   : #${BUILD_NUMBER}
+
+Build URL:
+${BUILD_URL}
+
+Please review the attached Ansible execution report
+to identify and troubleshoot the failing task.
+                """,
+
+                attachmentsPattern: "${REPORT_FILE}",
+                to: "solomon@example.com"
+            )
+        }
+
+        always {
+            echo "Pipeline execution completed."
+        }
+    }
+}
