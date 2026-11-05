@@ -18,13 +18,14 @@ pipeline {
             }
         }
 
-                stage('Provision Infrastructure and apply Kubernetes Manifests') {
+        stage('Provision Infrastructure and apply Kubernetes Manifests') {
             steps {
                 script {
                     withCredentials([
                         sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH'),
                         string(credentialsId: 'ubuntu-pass', variable: 'SUDO_PASS')
                     ]) {
+
                         // 1. Get current Jenkins container ID
                         def containerId = sh(script: 'hostname', returnStdout: true).trim()
 
@@ -46,7 +47,7 @@ pipeline {
                         """
 
                         try {
-                            // 5. Run Ansible passing the sudo password dynamically
+                            // 5. Run Ansible passing credentials as container environment variables
                             def status = sh(
                                 script: """
                                     set -o pipefail
@@ -55,12 +56,14 @@ pipeline {
                                         -u 0:0 \\
                                         -v "${hostWorkspace}":/ansible \\
                                         -e ANSIBLE_HOST_KEY_CHECKING=False \\
+                                        -e ANSIBLE_BECOME_PASS="${SUDO_PASS}" \\
+                                        -e ANSIBLE_BECOME_METHOD=sudo \\
+                                        -e ANSIBLE_PIPELINING=True \\
                                         -w /ansible \\
                                         ${ANSIBLE_IMAGE} \\
                                         ansible-playbook \\
                                             -i ansible/inventory.ini \\
                                             --private-key /ansible/id_rsa \\
-                                            -e "ansible_become_pass=${SUDO_PASS}" \\
                                             ansible/playbook.yml \\
                                         2>&1 | tee "${REPORT_FILE}"
                                 """,
@@ -83,14 +86,13 @@ pipeline {
 
                             echo "Infrastructure provisioning completed successfully."
                         } finally {
-                            // 6. Always clean up temporary key from workspace
+                            // 6. Always delete temporary key from workspace
                             sh "rm -f '${WORKSPACE}/id_rsa'"
                         }
                     }
                 }
             }
         }
-    }
 
     post {
         success {
