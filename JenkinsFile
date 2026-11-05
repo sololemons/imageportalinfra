@@ -56,7 +56,7 @@ pipeline {
                                         -u 0:0 \\
                                         -v "${hostWorkspace}":/ansible \\
                                         -e ANSIBLE_HOST_KEY_CHECKING=False \\
-                                        -e ANSIBLE_BECOME_PASS="${SUDO_PASS}" \\
+                                        -e ANSIBLE_BECOME_PASSWORD="${SUDO_PASS}" \\
                                         -e ANSIBLE_BECOME_METHOD=sudo \\
                                         -e ANSIBLE_PIPELINING=True \\
                                         -w /ansible \\
