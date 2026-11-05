@@ -1,7 +1,7 @@
 ---
 - name: Zero-Touch Infrastructure & Base K8s Provisioning
   hosts: ubuntu_servers
-  become: false
+  become: true
   gather_facts: false
 
   vars:
@@ -12,6 +12,7 @@
     floci_image: "floci/floci:latest"
     floci_port: "4566"
     subscriber_email: "solohlemons75@gmail.com"
+    user_kubeconfig: "/home/{{ ansible_user }}/.kube/config"
 
   tasks:
     - name: Ensure Floci emulator container is running
@@ -22,6 +23,7 @@
         restart_policy: unless-stopped
         ports:
           - "{{ floci_port }}:4566"
+      become: true
 
     - name: Check Minikube status
       ansible.builtin.command: minikube status
@@ -29,10 +31,12 @@
       failed_when: false
       changed_when: false
       check_mode: false
+      become: false
 
     - name: Start Minikube if needed
       ansible.builtin.command: minikube start --driver=docker --memory=2560mb --cpus=2
       when: "'Running' not in minikube_status.stdout"
+      become: false
 
     - name: Provision S3 & SNS via Terraform
       community.general.terraform:
@@ -48,6 +52,8 @@
       ansible.builtin.shell: |
         kubectl create namespace {{ k8s_namespace }} --dry-run=client -o yaml | kubectl apply -f -
       changed_when: false
+      become: false
+  
 
     - name: Publish Shared Infrastructure ConfigMap
       ansible.builtin.shell: |
@@ -56,10 +62,16 @@
           --from-literal=S3_BUCKET_NAME="{{ tf_result.outputs.s3_bucket_name.value }}" \
           --from-literal=SNS_TOPIC_ARN="{{ tf_result.outputs.sns_topic_arn.value }}" \
           --dry-run=client -o yaml | kubectl apply -f -
-
+      become: false
+     
     - name: Apply All Base Kubernetes Manifests (Secrets, MySQL, Base App Deployment)
-      become: true
       ansible.builtin.command: "kubectl apply -f {{ k8s_dir }}/ -n {{ k8s_namespace }}"
+      become: true
+      environment:
+        KUBECONFIG: "{{ user_kubeconfig }}"
 
     - name: Wait for MySQL Pod to be Ready
       ansible.builtin.command: "kubectl rollout status deployment/mysql -n {{ k8s_namespace }} --timeout=120s"
+      become: true
+      environment:
+        KUBECONFIG: "{{ user_kubeconfig }}"
