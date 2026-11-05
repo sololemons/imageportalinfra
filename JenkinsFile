@@ -12,7 +12,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 checkout scm
@@ -23,6 +22,13 @@ pipeline {
             steps {
                 script {
                     withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
+                        // 1. Check what Jenkins sees in the workspace
+                        sh 'echo "=== Jenkins Workspace Contents ==="'
+                        sh 'ls -la ${WORKSPACE}/ansible'
+
+                        // 2. Check what the ephemeral container sees inside /ansible
+                        sh 'echo "=== Container Mounted /ansible Contents ==="'
+                        sh 'docker run --rm -v "${WORKSPACE}":/ansible ${ANSIBLE_IMAGE} ls -la /ansible'
 
                         def status = sh(
                             script: """
@@ -64,11 +70,9 @@ pipeline {
     }
 
     post {
-
         success {
             emailext(
                 subject: "Infrastructure Provisioning Successful - Build #${BUILD_NUMBER}",
-
                 body: """
 Infrastructure provisioning completed successfully.
 
@@ -80,7 +84,6 @@ ${BUILD_URL}
 
 The full Ansible execution report is attached.
                 """,
-
                 attachmentsPattern: "${REPORT_FILE}",
                 to: "solomon@example.com"
             )
@@ -89,7 +92,6 @@ The full Ansible execution report is attached.
         failure {
             emailext(
                 subject: "Infrastructure Provisioning Failed - Build #${BUILD_NUMBER}",
-
                 body: """
 Infrastructure provisioning failed.
 
@@ -102,7 +104,6 @@ ${BUILD_URL}
 Please review the attached Ansible execution report
 to identify and troubleshoot the failing task.
                 """,
-
                 attachmentsPattern: "${REPORT_FILE}",
                 to: "solomon@example.com"
             )
