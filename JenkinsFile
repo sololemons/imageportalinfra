@@ -1,4 +1,3 @@
-```groovy
 pipeline {
     agent any
 
@@ -9,6 +8,7 @@ pipeline {
 
     environment {
         REPORT_FILE = "ansible-report.txt"
+        ANSIBLE_IMAGE = "willhallonline/ansible:latest"
     }
 
     stages {
@@ -19,39 +19,45 @@ pipeline {
             }
         }
 
-        stage('Provision Infrastructure') {
+        stage('Provision Infrastructure and apply Kubernetes Manifests') {
             steps {
                 script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
 
+                        def status = sh(
+                            script: """
+                                set -o pipefail
 
-                    def status = sh(
-                        script: """
-                            set -o pipefail
-
-                            ansible-playbook \
-                                -i localhost, \
-                                -c local \
-                                ansible/playbook.yml \
-                                2>&1 | tee "${REPORT_FILE}"
-                        """,
-                        returnStatus: true
-                    )
-
-                    archiveArtifacts(
-                        artifacts: REPORT_FILE,
-                        fingerprint: true,
-                        allowEmptyArchive: false
-                    )
-
-                    if (status != 0) {
-                        error(
-                            "Infrastructure provisioning failed. " +
-                            "Ansible exit code: ${status}. " +
-                            "See ${REPORT_FILE}"
+                                docker run --rm \\
+                                    -v "${WORKSPACE}":/ansible \\
+                                    -v "${SSH_KEY_PATH}":/root/.ssh/id_rsa:ro \\
+                                    -e ANSIBLE_HOST_KEY_CHECKING=False \\
+                                    -w /ansible \\
+                                    ${ANSIBLE_IMAGE} \\
+                                    ansible-playbook \\
+                                        -i ansible/inventory.ini \\
+                                        ansible/playbook.yml \\
+                                    2>&1 | tee "${REPORT_FILE}"
+                            """,
+                            returnStatus: true
                         )
-                    }
 
-                    echo "Infrastructure provisioning completed successfully."
+                        archiveArtifacts(
+                            artifacts: REPORT_FILE,
+                            fingerprint: true,
+                            allowEmptyArchive: false
+                        )
+
+                        if (status != 0) {
+                            error(
+                                "Infrastructure provisioning failed. " +
+                                "Ansible exit code: ${status}. " +
+                                "See ${REPORT_FILE}"
+                            )
+                        }
+
+                        echo "Infrastructure provisioning completed successfully."
+                    }
                 }
             }
         }

@@ -24,6 +24,6 @@ variable "sns_topic_name" {
 
 variable "subscriber_email" {
   type        = string
-  default     = "admin@example.com"
+  default     = "solohlemons75@gmail.com"
   description = "Email address for SNS notifications"
 }

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-portal-service
+  namespace: image-portal-dev
+  labels:
+    app: image-portal-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-portal-service
+  template:
+    metadata:
+      labels:
+        app: image-portal-service
+    spec:
+      # 1. Image Pull Secret for Docker Hub Authentication
+      imagePullSecrets:
+        - name: dockerhub-secret
+      containers:
+        - name: image-portal
+          image: solomondocker10277/image-portal-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8070
+          envFrom:
+            - configMapRef:
+                name: shared-infra-config
+            - configMapRef:
+                name: image-portal-config
+            - secretRef:
+                name: image-portal-secret
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8070
+            initialDelaySeconds: 25
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8070
+            initialDelaySeconds: 40
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: image-portal-service
+  namespace: image-portal
+spec:
+  type: NodePort
+  ports:
+    - port: 8070
+      targetPort: 8070
+      nodePort: 30070
+  selector:
+    app: image-portal-service

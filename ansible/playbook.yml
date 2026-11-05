@@ -1,88 +1,61 @@
 ---
-- name: Local Infrastructure Bootstrapping and Provisioning
-  hosts: localhost
-  connection: local
+- name: Zero-Touch Infrastructure & Base K8s Provisioning
+  hosts: ubuntu_servers
+  become: true
   gather_facts: false
 
   vars:
     terraform_dir: "{{ playbook_dir }}/../terraform"
+    k8s_dir: "{{ playbook_dir }}/../k8s"
+    k8s_namespace: "image-portal-dev"
     floci_image: "floci/floci:latest"
-    floci_container_name: "flocci_local"
     floci_port: "4566"
-    subscriber_email: "{{ lookup('env', 'SUBSCRIBER_EMAIL') | default('admin@example.com', true) }}"
+    subscriber_email: "solohlemons75@gmail.com"
 
   tasks:
-
     - name: Ensure Floci emulator container is running
       community.docker.docker_container:
-        name: "{{ floci_container_name }}"
+        name: floci_main
         image: "{{ floci_image }}"
         state: started
         restart_policy: unless-stopped
-        recreate: false
-        pull: true
         ports:
           - "{{ floci_port }}:4566"
-        env:
-          AWS_DEFAULT_REGION: "us-east-1"
 
-    - name: Wait for Floci API to become available
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ floci_port }}/_localstack/health"
-        method: GET
-        status_code: 200
-      register: floci_health
-      retries: 15
-      delay: 5
-      until: floci_health.status == 200
-
-    - name: Check Minikube cluster status
+    - name: Check Minikube status
       ansible.builtin.command: minikube status
       register: minikube_status
       failed_when: false
       changed_when: false
+      check_mode: false
 
-    - name: Start Minikube if not running
-      ansible.builtin.command: minikube start --driver=docker
-      when: minikube_status.rc != 0 or 'Running' not in minikube_status.stdout
+    - name: Start Minikube if needed
+      ansible.builtin.command: minikube start --driver=docker --memory=2560mb --cpus=2
+      when: "'Running' not in minikube_status.stdout"
 
-    - name: Verify Kubernetes connectivity
-      ansible.builtin.command: kubectl get nodes
-      register: kubectl_nodes
-      changed_when: false
-
-    - name: Validate Terraform configuration
-      ansible.builtin.command:
-        cmd: terraform validate
-        chdir: "{{ terraform_dir }}"
-      changed_when: false
-
-    - name: Apply Terraform Infrastructure
+    - name: Provision S3 & SNS via Terraform
       community.general.terraform:
         project_path: "{{ terraform_dir }}"
         state: present
-        force_init: true
         variables:
           subscriber_email: "{{ subscriber_email }}"
       register: tf_result
 
-    - name: Display Infrastructure Outputs
-      ansible.builtin.debug:
-        msg:
-          - "Infrastructure provisioning completed successfully."
-          - "S3 Bucket Name : {{ tf_result.outputs['s3_bucket_name']['value'] }}"
-          - "SNS Topic ARN  : {{ tf_result.outputs['sns_topic_arn']['value'] }}"
-          - "Subscriber     : {{ subscriber_email }}"
-
-    - name: Verify Docker containers
-      ansible.builtin.command: docker ps
-      register: docker_status
+    - name: Ensure Target Namespace Exists
+      ansible.builtin.shell: |
+        kubectl create namespace {{ k8s_namespace }} --dry-run=client -o yaml | kubectl apply -f -
       changed_when: false
 
-    - name: Summary
-      ansible.builtin.debug:
-        msg:
-          - "Floci running on port {{ floci_port }}"
-          - "Minikube cluster available"
-          - "Terraform applied successfully"
-          - "Infrastructure ready for application deployment"
+    - name: Publish Shared Infrastructure ConfigMap
+      ansible.builtin.shell: |
+        kubectl create configmap shared-infra-config \
+          --namespace={{ k8s_namespace }} \
+          --from-literal=S3_BUCKET_NAME="{{ tf_result.outputs.s3_bucket_name.value }}" \
+          --from-literal=SNS_TOPIC_ARN="{{ tf_result.outputs.sns_topic_arn.value }}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Apply All Base Kubernetes Manifests (Secrets, MySQL, Base App Deployment)
+      ansible.builtin.command: "kubectl apply -f {{ k8s_dir }}/ -n {{ k8s_namespace }}"
+
+    - name: Wait for MySQL Pod to be Ready
+      ansible.builtin.command: "kubectl rollout status deployment/mysql -n {{ k8s_namespace }} --timeout=120s"
