@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: image-portal-config
-  namespace: image-portal
+  namespace: image-portal-dev
 data:
   # Spring Datasource (Binds to spring.datasource.*)
   SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/imageportal?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
