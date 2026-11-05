@@ -1,7 +1,7 @@
 ---
 - name: Zero-Touch Infrastructure & Base K8s Provisioning
   hosts: ubuntu_servers
-  become: true
+  become: false
   gather_facts: false
 
   vars:
