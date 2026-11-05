@@ -32,47 +32,56 @@ pipeline {
                             returnStdout: true
                         ).trim()
 
-                        // 3. Construct the real host path to this job's workspace
+                        // 3. Construct real host workspace path
                         def hostWorkspace = hostJenkinsHome ? "${hostJenkinsHome}/workspace/${JOB_NAME}" : "${WORKSPACE}"
-                        def hostSshKeyPath = SSH_KEY_PATH.replace('/var/jenkins_home', hostJenkinsHome)
 
                         echo "Host workspace resolved to: ${hostWorkspace}"
-                        echo "Host SSH key path resolved to: ${hostSshKeyPath}"
 
-                        // 4. Run Ansible using the resolved host path
-                        def status = sh(
-                            script: """
-                                set -o pipefail
+                        // 4. Mirror key into workspace root & set 600 permissions to bypass @tmp folder permission locks
+                        sh """
+                            cp "${SSH_KEY_PATH}" "${WORKSPACE}/id_rsa"
+                            chmod 600 "${WORKSPACE}/id_rsa"
+                        """
 
-                                docker run --rm \\
-                                    -v "${hostWorkspace}":/ansible \\
-                                    -v "${hostSshKeyPath}":/root/.ssh/id_rsa:ro \\
-                                    -e ANSIBLE_HOST_KEY_CHECKING=False \\
-                                    -w /ansible \\
-                                    ${ANSIBLE_IMAGE} \\
-                                    ansible-playbook \\
-                                        -i ansible/inventory.ini \\
-                                        ansible/playbook.yml \\
-                                    2>&1 | tee "${REPORT_FILE}"
-                            """,
-                            returnStatus: true
-                        )
+                        try {
+                            // 5. Run Ansible using workspace-mirrored SSH key mounted from host path
+                            def status = sh(
+                                script: """
+                                    set -o pipefail
 
-                        archiveArtifacts(
-                            artifacts: REPORT_FILE,
-                            fingerprint: true,
-                            allowEmptyArchive: false
-                        )
-
-                        if (status != 0) {
-                            error(
-                                "Infrastructure provisioning failed. " +
-                                "Ansible exit code: ${status}. " +
-                                "See ${REPORT_FILE}"
+                                    docker run --rm \\
+                                        -v "${hostWorkspace}":/ansible \\
+                                        -v "${hostWorkspace}/id_rsa":/root/.ssh/id_rsa:ro \\
+                                        -e ANSIBLE_HOST_KEY_CHECKING=False \\
+                                        -w /ansible \\
+                                        ${ANSIBLE_IMAGE} \\
+                                        ansible-playbook \\
+                                            -i ansible/inventory.ini \\
+                                            ansible/playbook.yml \\
+                                        2>&1 | tee "${REPORT_FILE}"
+                                """,
+                                returnStatus: true
                             )
-                        }
 
-                        echo "Infrastructure provisioning completed successfully."
+                            archiveArtifacts(
+                                artifacts: REPORT_FILE,
+                                fingerprint: true,
+                                allowEmptyArchive: false
+                            )
+
+                            if (status != 0) {
+                                error(
+                                    "Infrastructure provisioning failed. " +
+                                    "Ansible exit code: ${status}. " +
+                                    "See ${REPORT_FILE}"
+                                )
+                            }
+
+                            echo "Infrastructure provisioning completed successfully."
+                        } finally {
+                            // 6. Always clean up temporary SSH key file from workspace
+                            sh "rm -f '${WORKSPACE}/id_rsa'"
+                        }
                     }
                 }
             }
