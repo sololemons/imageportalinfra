@@ -18,11 +18,13 @@ pipeline {
             }
         }
 
-        stage('Provision Infrastructure and apply Kubernetes Manifests') {
+                stage('Provision Infrastructure and apply Kubernetes Manifests') {
             steps {
                 script {
-                    withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
-
+                    withCredentials([
+                        sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH'),
+                        string(credentialsId: 'ubuntu-pass', variable: 'SUDO_PASS')
+                    ]) {
                         // 1. Get current Jenkins container ID
                         def containerId = sh(script: 'hostname', returnStdout: true).trim()
 
@@ -44,7 +46,7 @@ pipeline {
                         """
 
                         try {
-                            // 5. Run Ansible using /ansible/id_rsa directly inside the container
+                            // 5. Run Ansible passing the sudo password dynamically
                             def status = sh(
                                 script: """
                                     set -o pipefail
@@ -58,6 +60,7 @@ pipeline {
                                         ansible-playbook \\
                                             -i ansible/inventory.ini \\
                                             --private-key /ansible/id_rsa \\
+                                            -e "ansible_become_pass=${SUDO_PASS}" \\
                                             ansible/playbook.yml \\
                                         2>&1 | tee "${REPORT_FILE}"
                                 """,
@@ -80,7 +83,7 @@ pipeline {
 
                             echo "Infrastructure provisioning completed successfully."
                         } finally {
-                            // 6. Always delete the temporary key from workspace on exit
+                            // 6. Always clean up temporary key from workspace
                             sh "rm -f '${WORKSPACE}/id_rsa'"
                         }
                     }
