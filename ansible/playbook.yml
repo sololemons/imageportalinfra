@@ -38,6 +38,7 @@
       community.general.terraform:
         project_path: "{{ terraform_dir }}"
         state: present
+        force_init: true
         variables:
           subscriber_email: "{{ subscriber_email }}"
       register: tf_result
