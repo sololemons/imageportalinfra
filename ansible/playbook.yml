@@ -41,6 +41,7 @@
         variables:
           subscriber_email: "{{ subscriber_email }}"
       register: tf_result
+      become: true
 
     - name: Ensure Target Namespace Exists
       ansible.builtin.shell: |
