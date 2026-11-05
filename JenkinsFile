@@ -58,12 +58,13 @@ pipeline {
                                         -e ANSIBLE_HOST_KEY_CHECKING=False \\
                                         -e ANSIBLE_BECOME_PASSWORD="${SUDO_PASS}" \\
                                         -e ANSIBLE_BECOME_METHOD=sudo \\
-                                        -e ANSIBLE_PIPELINING=True \\
+                                        -e ANSIBLE_BECOME=True \\
                                         -w /ansible \\
                                         ${ANSIBLE_IMAGE} \\
                                         ansible-playbook \\
                                             -i ansible/inventory.ini \\
                                             --private-key /ansible/id_rsa \\
+                                            --extra-vars "ansible_become_password=${SUDO_PASS}" \\
                                             ansible/playbook.yml \\
                                         2>&1 | tee "${REPORT_FILE}"
                                 """,
