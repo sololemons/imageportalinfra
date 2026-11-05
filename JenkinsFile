@@ -34,8 +34,10 @@ pipeline {
 
                         // 3. Construct the real host path to this job's workspace
                         def hostWorkspace = hostJenkinsHome ? "${hostJenkinsHome}/workspace/${JOB_NAME}" : "${WORKSPACE}"
+                        def hostSshKeyPath = SSH_KEY_PATH.replace('/var/jenkins_home', hostJenkinsHome)
 
                         echo "Host workspace resolved to: ${hostWorkspace}"
+                        echo "Host SSH key path resolved to: ${hostSshKeyPath}"
 
                         // 4. Run Ansible using the resolved host path
                         def status = sh(
@@ -44,7 +46,7 @@ pipeline {
 
                                 docker run --rm \\
                                     -v "${hostWorkspace}":/ansible \\
-                                    -v "${SSH_KEY_PATH}":/root/.ssh/id_rsa:ro \\
+                                    -v "${hostSshKeyPath}":/root/.ssh/id_rsa:ro \\
                                     -e ANSIBLE_HOST_KEY_CHECKING=False \\
                                     -w /ansible \\
                                     ${ANSIBLE_IMAGE} \\
