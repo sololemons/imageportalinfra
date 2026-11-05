@@ -60,6 +60,7 @@ pipeline {
                                         ansible-playbook \\
                                             -i ansible/inventory.ini \\
                                             --private-key /ansible/id_rsa \\
+                                            -e "host_workspace=${hostWorkspace}" \\
                                             ansible/playbook.yml \\
                                         2>&1 | tee "${REPORT_FILE}"
                                 """,

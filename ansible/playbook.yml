@@ -5,8 +5,9 @@
   gather_facts: false
 
   vars:
-    terraform_dir: "{{ playbook_dir }}/../terraform"
-    k8s_dir: "{{ playbook_dir }}/../k8s"
+    host_workspace: "{{ workspace | default(playbook_dir + '/..') }}"
+    terraform_dir: "{{ host_workspace }}/terraform"
+    k8s_dir: "{{ host_workspace }}/k8s"
     k8s_namespace: "image-portal-dev"
     floci_image: "floci/floci:latest"
     floci_port: "4566"
