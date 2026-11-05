@@ -47,7 +47,7 @@ pipeline {
                         """
 
                         try {
-                            // 5. Run Ansible passing credentials as container environment variables
+                            // 5. Run Ansible with pseudo-TTY (-tt) and stdin become flags (-H -S)
                             def status = sh(
                                 script: """
                                     set -o pipefail
@@ -56,15 +56,16 @@ pipeline {
                                         -u 0:0 \\
                                         -v "${hostWorkspace}":/ansible \\
                                         -e ANSIBLE_HOST_KEY_CHECKING=False \\
-                                        -e ANSIBLE_BECOME_PASSWORD="${SUDO_PASS}" \\
-                                        -e ANSIBLE_BECOME_METHOD=sudo \\
                                         -e ANSIBLE_BECOME=True \\
+                                        -e ANSIBLE_BECOME_METHOD=sudo \\
+                                        -e ANSIBLE_BECOME_PASSWORD="${SUDO_PASS}" \\
+                                        -e ANSIBLE_BECOME_FLAGS="-H -S" \\
+                                        -e ANSIBLE_SSH_EXTRA_ARGS="-tt" \\
                                         -w /ansible \\
                                         ${ANSIBLE_IMAGE} \\
                                         ansible-playbook \\
                                             -i ansible/inventory.ini \\
                                             --private-key /ansible/id_rsa \\
-                                            --extra-vars "ansible_become_password=${SUDO_PASS}" \\
                                             ansible/playbook.yml \\
                                         2>&1 | tee "${REPORT_FILE}"
                                 """,
@@ -87,7 +88,7 @@ pipeline {
 
                             echo "Infrastructure provisioning completed successfully."
                         } finally {
-                            // 6. Always delete temporary key from workspace
+                            // 6. Always clean up temporary key from workspace
                             sh "rm -f '${WORKSPACE}/id_rsa'"
                         }
                     }
