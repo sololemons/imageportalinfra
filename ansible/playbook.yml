@@ -58,6 +58,7 @@
           --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Apply All Base Kubernetes Manifests (Secrets, MySQL, Base App Deployment)
+      become: true
       ansible.builtin.command: "kubectl apply -f {{ k8s_dir }}/ -n {{ k8s_namespace }}"
 
     - name: Wait for MySQL Pod to be Ready
