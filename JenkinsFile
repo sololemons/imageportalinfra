@@ -26,37 +26,38 @@ pipeline {
                         // 1. Get current Jenkins container ID
                         def containerId = sh(script: 'hostname', returnStdout: true).trim()
 
-                        // 2. Discover the actual host path/volume backing /var/jenkins_home
+                        // 2. Discover actual host path backing /var/jenkins_home
                         def hostJenkinsHome = sh(
                             script: "docker inspect ${containerId} --format '{{range .Mounts}}{{if eq .Destination \"/var/jenkins_home\"}}{{.Source}}{{end}}{{end}}'",
                             returnStdout: true
                         ).trim()
 
-                        // 3. Construct real host workspace path
+                        // 3. Resolve host workspace path
                         def hostWorkspace = hostJenkinsHome ? "${hostJenkinsHome}/workspace/${JOB_NAME}" : "${WORKSPACE}"
 
                         echo "Host workspace resolved to: ${hostWorkspace}"
 
-                        // 4. Mirror key into workspace root & set 600 permissions to bypass @tmp folder permission locks
+                        // 4. Copy key into workspace root with 600 permissions
                         sh """
                             cp "${SSH_KEY_PATH}" "${WORKSPACE}/id_rsa"
                             chmod 600 "${WORKSPACE}/id_rsa"
                         """
 
                         try {
-                            // 5. Run Ansible using workspace-mirrored SSH key mounted from host path
+                            // 5. Run Ansible using /ansible/id_rsa directly inside the container
                             def status = sh(
                                 script: """
                                     set -o pipefail
 
                                     docker run --rm \\
+                                        -u 0:0 \\
                                         -v "${hostWorkspace}":/ansible \\
-                                        -v "${hostWorkspace}/id_rsa":/root/.ssh/id_rsa:ro \\
                                         -e ANSIBLE_HOST_KEY_CHECKING=False \\
                                         -w /ansible \\
                                         ${ANSIBLE_IMAGE} \\
                                         ansible-playbook \\
                                             -i ansible/inventory.ini \\
+                                            --private-key /ansible/id_rsa \\
                                             ansible/playbook.yml \\
                                         2>&1 | tee "${REPORT_FILE}"
                                 """,
@@ -79,7 +80,7 @@ pipeline {
 
                             echo "Infrastructure provisioning completed successfully."
                         } finally {
-                            // 6. Always clean up temporary SSH key file from workspace
+                            // 6. Always delete the temporary key from workspace on exit
                             sh "rm -f '${WORKSPACE}/id_rsa'"
                         }
                     }
