@@ -22,20 +22,28 @@ pipeline {
             steps {
                 script {
                     withCredentials([sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]) {
-                        // 1. Check what Jenkins sees in the workspace
-                        sh 'echo "=== Jenkins Workspace Contents ==="'
-                        sh 'ls -la ${WORKSPACE}/ansible'
 
-                        // 2. Check what the ephemeral container sees inside /ansible
-                        sh 'echo "=== Container Mounted /ansible Contents ==="'
-                        sh 'docker run --rm -v "${WORKSPACE}":/ansible ${ANSIBLE_IMAGE} ls -la /ansible'
+                        // 1. Get current Jenkins container ID
+                        def containerId = sh(script: 'hostname', returnStdout: true).trim()
 
+                        // 2. Discover the actual host path/volume backing /var/jenkins_home
+                        def hostJenkinsHome = sh(
+                            script: "docker inspect ${containerId} --format '{{range .Mounts}}{{if eq .Destination \"/var/jenkins_home\"}}{{.Source}}{{end}}{{end}}'",
+                            returnStdout: true
+                        ).trim()
+
+                        // 3. Construct the real host path to this job's workspace
+                        def hostWorkspace = hostJenkinsHome ? "${hostJenkinsHome}/workspace/${JOB_NAME}" : "${WORKSPACE}"
+
+                        echo "Host workspace resolved to: ${hostWorkspace}"
+
+                        // 4. Run Ansible using the resolved host path
                         def status = sh(
                             script: """
                                 set -o pipefail
 
                                 docker run --rm \\
-                                    -v "${WORKSPACE}":/ansible \\
+                                    -v "${hostWorkspace}":/ansible \\
                                     -v "${SSH_KEY_PATH}":/root/.ssh/id_rsa:ro \\
                                     -e ANSIBLE_HOST_KEY_CHECKING=False \\
                                     -w /ansible \\
