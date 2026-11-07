@@ -11,7 +11,7 @@
     k8s_namespace: "image-portal-dev"
     floci_image: "floci/floci:latest"
     floci_port: "4566"
-    subscriber_email: "solohlemons75@gmail.com"
+    subscriber_email: "solomonndimu75@gmail.com"
     user_kubeconfig: "/home/{{ ansible_user }}/.kube/config"
 
   tasks:
@@ -53,7 +53,6 @@
         kubectl create namespace {{ k8s_namespace }} --dry-run=client -o yaml | kubectl apply -f -
       changed_when: false
       become: false
-  
 
     - name: Publish Shared Infrastructure ConfigMap
       ansible.builtin.shell: |
@@ -63,8 +62,32 @@
           --from-literal=SNS_TOPIC_ARN="{{ tf_result.outputs.sns_topic_arn.value }}" \
           --dry-run=client -o yaml | kubectl apply -f -
       become: false
-     
-    - name: Apply All Base Kubernetes Manifests (Secrets, MySQL, Base App Deployment)
+
+    - name: Create or Update App Secrets (DB & JWT)
+      ansible.builtin.shell: |
+        kubectl create secret generic image-portal-secret \
+          --namespace={{ k8s_namespace }} \
+          --from-literal=SPRING_DATASOURCE_PASSWORD="{{ db_pass }}" \
+          --from-literal=APP_JWT_SECRET="{{ jwt_secret }}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+      become: true
+      environment:
+        KUBECONFIG: "{{ user_kubeconfig }}"
+
+    - name: Create or Update Docker Hub Registry Secret
+      ansible.builtin.shell: |
+        kubectl create secret docker-registry docker-hub-secret \
+          --namespace={{ k8s_namespace }} \
+          --docker-server=https://index.docker.io/v1/ \
+          --docker-username="{{ docker_user }}" \
+          --docker-password="{{ docker_pass }}" \
+          --docker-email="{{ subscriber_email }}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+      become: true
+      environment:
+        KUBECONFIG: "{{ user_kubeconfig }}"
+
+    - name: Apply All Base Kubernetes Manifests (MySQL, Base App Deployment)
       ansible.builtin.command: "kubectl apply -f {{ k8s_dir }}/ -n {{ k8s_namespace }}"
       become: true
       environment:

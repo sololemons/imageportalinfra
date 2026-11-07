@@ -22,7 +22,10 @@ pipeline {
             steps {
                 script {
                     withCredentials([
-                        sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH')
+                        sshUserPrivateKey(credentialsId: 'ubuntu-ssh-key', keyFileVariable: 'SSH_KEY_PATH'),
+                        usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS'),
+                        string(credentialsId: 'db-password', variable: 'DB_PASS'),
+                        string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET')
                     ]) {
 
                         // 1. Get current Jenkins container ID
@@ -46,7 +49,7 @@ pipeline {
                         """
 
                         try {
-                            // 5. Run Ansible clean execution (using passwordless sudo on host)
+                            // 5. Run Ansible clean execution with injected credentials
                             def status = sh(
                                 script: """
                                     set -o pipefail
@@ -61,6 +64,10 @@ pipeline {
                                             -i ansible/inventory.ini \\
                                             --private-key /ansible/id_rsa \\
                                             -e "host_workspace=${hostWorkspace}" \\
+                                            -e "db_pass=${DB_PASS}" \\
+                                            -e "jwt_secret=${JWT_SECRET}" \\
+                                            -e "docker_user=${DOCKER_USER}" \\
+                                            -e "docker_pass=${DOCKER_PASS}" \\
                                             ansible/playbook.yml \\
                                         2>&1 | tee "${REPORT_FILE}"
                                 """,
@@ -108,7 +115,7 @@ ${BUILD_URL}
 The full Ansible execution report is attached.
                 """,
                 attachmentsPattern: "${REPORT_FILE}",
-                to: "solomon@example.com"
+                to: "solomonndimu75@gmail.com"
             )
         }
 
@@ -128,7 +135,7 @@ Please review the attached Ansible execution report
 to identify and troubleshoot the failing task.
                 """,
                 attachmentsPattern: "${REPORT_FILE}",
-                to: "solomon@example.com"
+                to: "solomonndimu75@gmail.com"
             )
         }
 

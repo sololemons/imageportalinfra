@@ -15,9 +15,8 @@ spec:
       labels:
         app: image-portal-service
     spec:
-      # 1. Image Pull Secret for Docker Hub Authentication
       imagePullSecrets:
-        - name: dockerhub-secret
+        - name: docker-hub-secret
       containers:
         - name: image-portal
           image: solomondocker10277/image-portal-service:latest

@@ -4,14 +4,11 @@ metadata:
   name: image-portal-config
   namespace: image-portal-dev
 data:
-  # Spring Datasource (Binds to spring.datasource.*)
   SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/imageportal?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
   SPRING_DATASOURCE_USERNAME: "root"
   
-  # Spring JPA (Binds to spring.jpa.hibernate.ddl-auto)
   SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
   
-  # AWS SDK v2 Native Environment Variables
   AWS_REGION: "us-east-1"
   AWS_ACCESS_KEY_ID: "test"
   AWS_SECRET_ACCESS_KEY: "test"

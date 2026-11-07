@@ -33,13 +33,11 @@ spec:
           ports:
             - containerPort: 3306
           env:
-            # Sets root user password directly from image-portal-secret
             - name: MYSQL_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: image-portal-secret
                   key: SPRING_DATASOURCE_PASSWORD
-            # Automatically provisions the database on initial boot
             - name: MYSQL_DATABASE
               value: "imageportal"
           resources:
