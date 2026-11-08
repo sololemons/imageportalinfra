@@ -16,7 +16,7 @@ spec:
         app: image-portal-service
     spec:
       hostAliases:
-        - ip: "192.168.49.1"
+        - ip: "192.168.67.1"
           hostnames:
             - "host.minikube.internal"
       imagePullSecrets:
